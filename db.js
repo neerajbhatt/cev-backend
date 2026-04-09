@@ -20,7 +20,32 @@ db.exec(`
     member_id TEXT UNIQUE,
     programs TEXT DEFAULT '["Medicaid","SNAP"]',
     language TEXT DEFAULT 'en',
+    mfa_enabled INTEGER DEFAULT 0,
+    mfa_phone TEXT,
+    password_changed_at TEXT DEFAULT (datetime('now')),
     created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS login_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    ip TEXT,
+    user_agent TEXT,
+    status TEXT DEFAULT 'success',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    ip TEXT,
+    user_agent TEXT,
+    is_current INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_active TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS compliance (
@@ -125,6 +150,21 @@ function seedUser(userId) {
   db.prepare('INSERT INTO delegates (user_id,name,relation,email,permissions,added_on) VALUES (?,?,?,?,?,?)').run(
     userId, 'Robert Johnson', 'Caregiver', 'rjohnson@email.com', '["view","upload"]', '2026-01-15'
   )
+
+  // Seed MFA
+  db.prepare('UPDATE users SET mfa_enabled=1, mfa_phone=? WHERE id=?').run('(555) 342-1890', userId)
+
+  // Seed login history
+  const insertHistory = db.prepare('INSERT INTO login_history (user_id,ip,user_agent,status,created_at) VALUES (?,?,?,?,?)')
+  insertHistory.run(userId, '192.168.1.42', 'Chrome 124 / Windows 11', 'success', '2026-03-28 09:42:00')
+  insertHistory.run(userId, '192.168.1.42', 'Chrome 124 / Windows 11', 'success', '2026-03-25 14:15:00')
+  insertHistory.run(userId, '10.0.0.5', 'Safari 17 / iPhone', 'success', '2026-03-22 08:30:00')
+  insertHistory.run(userId, '10.0.0.5', 'Safari 17 / iPhone', 'failed', '2026-03-22 08:28:00')
+  insertHistory.run(userId, '192.168.1.42', 'Chrome 124 / Windows 11', 'success', '2026-03-18 11:05:00')
+
+  // Seed sessions
+  const insertSession = db.prepare('INSERT INTO sessions (user_id,token_hash,ip,user_agent,is_current,created_at,last_active) VALUES (?,?,?,?,?,?,?)')
+  insertSession.run(userId, 'seed-hash-1', '192.168.1.42', 'Chrome 124 / Windows 11', 1, '2026-03-28 09:42:00', '2026-03-28 10:15:00')
 }
 
 const DEMO_USER_ID = 'user-demo-001'
